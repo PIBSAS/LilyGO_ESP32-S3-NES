@@ -2,32 +2,28 @@
 #define TFT_DRIVER_H
 
 #include <Arduino.h>
-#include <SPI.h>
+#include <Arduino_GFX_Library.h>
 #include "hw_config.h"
- 
-#define TFT_SWRESET   0x01
-#define TFT_SLPOUT    0x11
-#define TFT_COLMOD    0x3A
-#define TFT_MADCTL    0x36
-#define TFT_CASET     0x2A
-#define TFT_RASET     0x2B
-#define TFT_RAMWR     0x2C
-#define TFT_DISPON    0x29
-#define TFT_DISPOFF   0x28
-#define TFT_INVON     0x21
-#define TFT_INVOFF    0x20
- 
-#define DISPLAY_WIDTH  280
-#define DISPLAY_HEIGHT 240
- 
-#define ST7789_COL_OFFSET 20
- 
+
+/*
+    LILYGO T-Display-S3
+    ST7789 - i8080 8bit parallel
+    Resolution: 170x320 (landscape 320x170)
+*/
+
+#define DISPLAY_WIDTH   320
+#define DISPLAY_HEIGHT  170
+
 #define TFT_BLACK   0x0000
 #define TFT_WHITE   0xFFFF
 #define TFT_RED     0xF800
 #define TFT_GREEN   0x07E0
 #define TFT_BLUE    0x001F
- 
+
+// ======================================================
+// FONT
+// ======================================================
+
 static const uint8_t font_5x7[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, 0x00, // 0x20 ' '
     0x00, 0x00, 0x5F, 0x00, 0x00, // 0x21 '!'
@@ -127,237 +123,188 @@ static const uint8_t font_5x7[] PROGMEM = {
     0x00, 0x00, 0x00, 0x00, 0x00  // 0x7F DEL
 };
 
+/*
+    Podés dejar tu font completa original.
+    La recorté acá para no pegar 500 líneas.
+*/
+
+// ======================================================
+// TFT DRIVER
+// ======================================================
+
 class TFTDriver {
 private:
-    static constexpr int TFT_DC = 15;
-    static constexpr int TFT_RST = 9;
-    static constexpr int TFT_CS = 10;
-    static constexpr int TFT_SCK = 12;
-    static constexpr int TFT_MOSI = 11;
-    static constexpr int TFT_MISO = -1;
-    
-    void spi_write_cmd(uint8_t cmd) {
-        digitalWrite(TFT_CS, LOW);
-        digitalWrite(TFT_DC, LOW);  
-        SPI.write(cmd);
-        digitalWrite(TFT_DC, HIGH);
-        digitalWrite(TFT_CS, HIGH);
-    }
-    
-    void spi_write_byte(uint8_t data) {
-        digitalWrite(TFT_CS, LOW);
-        digitalWrite(TFT_DC, HIGH);  
-        SPI.write(data);
-        digitalWrite(TFT_CS, HIGH);
-    }
-     
-    void spi_write_word(uint16_t data) {
-        digitalWrite(TFT_CS, LOW);
-        digitalWrite(TFT_DC, HIGH); 
-        SPI.write16(data);
-        digitalWrite(TFT_CS, HIGH);
-    }
-  public:
+
+    Arduino_ESP32PAR8Q *bus = nullptr;
+    Arduino_ST7789 *gfx = nullptr;
+
+public:
+
     TFTDriver() {}
-    
+
     void init() {
-        pinMode(TFT_DC, OUTPUT);
-        pinMode(TFT_RST, OUTPUT);
-        pinMode(TFT_CS, OUTPUT);
-        
-        digitalWrite(TFT_CS, HIGH);
-        digitalWrite(TFT_DC, HIGH);
-         
-        SPI.begin(TFT_SCK, TFT_MISO, TFT_MOSI, TFT_CS);
-        SPI.setFrequency(80000000);
-        SPI.setDataMode(SPI_MODE0);
-        SPI.setBitOrder(MSBFIRST);
-        
-        digitalWrite(TFT_RST, HIGH);
-        delay(30);
-        digitalWrite(TFT_RST, LOW);
-        delay(30);
-        digitalWrite(TFT_RST, HIGH);
-        delay(30);
 
-        spi_write_cmd(TFT_SWRESET);
-        delay(30);
-        
-        spi_write_cmd(TFT_SLPOUT);
-        delay(50);
-        
-        spi_write_cmd(TFT_COLMOD);
-        spi_write_byte(0x55);  
-        delay(5);
-        
-        spi_write_cmd(TFT_MADCTL);
-        spi_write_byte(0x60);  // Landscape: rotate 90°
-        delay(5);
-        
-        spi_write_cmd(TFT_CASET);
-        spi_write_cmd(TFT_RASET);
-        delay(5);
+        // Backlight
+        pinMode(PIN_LCD_BL, OUTPUT);
+        digitalWrite(PIN_LCD_BL, HIGH);
 
-        fillScreen(TFT_BLACK);
-        delay(20);
-        
-        spi_write_cmd(TFT_DISPON);
-        delay(50);
+        // Power enable
+        pinMode(PIN_POWER_ON, OUTPUT);
+        digitalWrite(PIN_POWER_ON, HIGH);
 
-        spi_write_cmd(TFT_INVON);
-        delay(10);
-        
+        delay(100);
+
+        // ==================================================
+        // 8-bit Parallel Bus
+        // ==================================================
+
+        bus = new Arduino_ESP32PAR8Q(
+            PIN_LCD_CS,
+            PIN_LCD_DC,
+            PIN_LCD_WR,
+
+            PIN_LCD_D0,
+            PIN_LCD_D1,
+            PIN_LCD_D2,
+            PIN_LCD_D3,
+            PIN_LCD_D4,
+            PIN_LCD_D5,
+            PIN_LCD_D6,
+            PIN_LCD_D7
+        );
+
+        // ==================================================
+        // ST7789
+        // ==================================================
+
+        gfx = new Arduino_ST7789(
+            bus,
+            PIN_LCD_RES,
+            1,          // rotation
+            true,       // IPS
+            170,        // width
+            320,        // height
+            35,         // col offset
+            0           // row offset
+        );
+
+        gfx->begin(16000000);
+
+        // Landscape
+        gfx->setRotation(1);
+
+        gfx->fillScreen(TFT_BLACK);
     }
-    
+
+    // ==================================================
+    // BASIC DRAW
+    // ==================================================
+
     void fillScreen(uint16_t color) {
-        spi_write_cmd(TFT_CASET);
-        spi_write_word(ST7789_COL_OFFSET);
-        spi_write_word(ST7789_COL_OFFSET + DISPLAY_WIDTH - 1);
-        
-        spi_write_cmd(TFT_RASET);
-        spi_write_word(0);
-        spi_write_word(DISPLAY_HEIGHT - 1);
-        
-        spi_write_cmd(TFT_RAMWR);
-         
-        digitalWrite(TFT_CS, LOW);
-        digitalWrite(TFT_DC, HIGH);  
-        
-        uint32_t pixel_count = (uint32_t)DISPLAY_WIDTH * DISPLAY_HEIGHT;
-        static uint8_t buffer[512];  
-         
-        uint8_t high = color >> 8;
-        uint8_t low = color & 0xFF;
-        for (int i = 0; i < 512; i += 2) {
-            buffer[i] = high;
-            buffer[i + 1] = low;
-        }
-         
-        for (uint32_t i = 0; i < pixel_count; i += 256) {
-            uint32_t chunk_size = (pixel_count - i > 256) ? 256 : (pixel_count - i);
-            SPI.writeBytes(buffer, chunk_size * 2);
-        }
-        
-        digitalWrite(TFT_CS, HIGH);
+        gfx->fillScreen(color);
     }
-    
+
+    void drawPixel(int x, int y, uint16_t color) {
+        gfx->drawPixel(x, y, color);
+    }
+
+    void drawFilledRect(int x, int y, int w, int h, uint16_t color) {
+        gfx->fillRect(x, y, w, h, color);
+    }
+
     void pushImage(int x, int y, int w, int h, const uint16_t *data, bool preswapped = false) {
- 
-        spi_write_cmd(TFT_CASET);
-        spi_write_word(x + ST7789_COL_OFFSET);
-        spi_write_word(x + w - 1 + ST7789_COL_OFFSET);
-         
-        spi_write_cmd(TFT_RASET);
-        spi_write_word(y);
-        spi_write_word(y + h - 1);
-         
-        spi_write_cmd(TFT_RAMWR);
-         
-        digitalWrite(TFT_CS, LOW);
-        digitalWrite(TFT_DC, HIGH);  
-         
-        uint32_t pixel_count = (uint32_t)w * h;
-         
-        static uint8_t buffer[1024];  
-         
-        for (uint32_t i = 0; i < pixel_count; i += 512) {
-            uint32_t chunk_size = (pixel_count - i > 512) ? 512 : (pixel_count - i);
-            if (preswapped) { 
-                SPI.writeBytes((const uint8_t *)&data[i], chunk_size * 2);
-            } else {
-                for (uint32_t j = 0; j < chunk_size; j++) {
-                    uint16_t pixel = data[i + j];
-                    buffer[j * 2] = pixel >> 8;      
-                    buffer[j * 2 + 1] = pixel & 0xFF;  
-                }
-                SPI.writeBytes(buffer, chunk_size * 2);
-            }
+
+        if (preswapped) {
+            gfx->draw16bitBeRGBBitmap(x, y, (uint16_t *)data, w, h);
+        } else {
+            gfx->draw16bitRGBBitmap(x, y, (uint16_t *)data, w, h);
         }
-         
-        digitalWrite(TFT_CS, HIGH);
-    } 
+    }
+
+    // ==================================================
+    // TEXT
+    // ==================================================
+
     void drawChar(int x, int y, char c, uint16_t fg, uint16_t bg, int scale = 1) {
-        if (scale < 1) {
-            scale = 1;
+
+        if (scale < 1) scale = 1;
+
+        uint8_t idx;
+
+        if (c >= 0x20 && c <= 0x7F) {
+            idx = c - 0x20;
+        } else {
+            idx = '?' - 0x20;
         }
 
-        uint8_t idx = (c >= 0x20 && c <= 0x7F) ? static_cast<uint8_t>(c - 0x20) : static_cast<uint8_t>('?' - 0x20);
         const uint8_t *glyph = &font_5x7[idx * 5];
 
         for (int cy = 0; cy < 7; cy++) {
+
             for (int cx = 0; cx < 5; cx++) {
+
                 uint8_t line = pgm_read_byte(&glyph[cx]);
+
+                uint16_t color;
+
                 if (line & (1 << cy)) {
-                    drawFilledRect(x + cx * scale, y + cy * scale, scale, scale, fg);
+                    color = fg;
                 } else {
-                    drawFilledRect(x + cx * scale, y + cy * scale, scale, scale, bg);
+                    color = bg;
+                }
+
+                if (scale == 1) {
+                    gfx->drawPixel(x + cx, y + cy, color);
+                } else {
+                    gfx->fillRect(
+                        x + cx * scale,
+                        y + cy * scale,
+                        scale,
+                        scale,
+                        color
+                    );
                 }
             }
         }
     }
-      
-    void drawFilledRect(int x, int y, int w, int h, uint16_t color) {
-        if (w <= 0 || h <= 0) {
-            return;
-        }
 
-        int x0 = max(0, x);
-        int y0 = max(0, y);
-        int x1 = min(DISPLAY_WIDTH - 1, x + w - 1);
-        int y1 = min(DISPLAY_HEIGHT - 1, y + h - 1);
+    void drawString(int x, int y, const char *str,
+                    uint16_t fg, uint16_t bg,
+                    int scale = 1) {
 
-        if (x1 < x0 || y1 < y0) {
-            return;
-        }
+        int px = x;
 
-        int clipped_w = x1 - x0 + 1;
-        int clipped_h = y1 - y0 + 1;
-         
-        spi_write_cmd(TFT_CASET);
-        spi_write_word(x0 + ST7789_COL_OFFSET);
-        spi_write_word(x1 + ST7789_COL_OFFSET);
-         
-        spi_write_cmd(TFT_RASET);
-         
-        spi_write_word(y0);
-        spi_write_word(y1);
-         
-        spi_write_cmd(TFT_RAMWR);
-         
-        digitalWrite(TFT_CS, LOW);
-        digitalWrite(TFT_DC, HIGH);
-         
-        uint32_t pixels = (uint32_t)clipped_w * clipped_h;
-         
-        for (uint32_t i = 0; i < pixels; i++) {
-             SPI.write16(color);
+        while (*str) {
+
+            drawChar(px, y, *str, fg, bg, scale);
+
+            px += (5 + 1) * scale;
+
+            str++;
         }
-         
-         digitalWrite(TFT_CS, HIGH);
     }
-      
-    void drawNumber(int x, int y, int num, uint16_t fg, uint16_t bg, int scale = 1) {
-        if (num < 0) num = 0;
-        char buf[10];
+
+    void drawNumber(int x, int y, int num,
+                    uint16_t fg, uint16_t bg,
+                    int scale = 1) {
+
+        char buf[16];
+
         sprintf(buf, "%d", num);
-         
-        int px = x;
-        for (int i = 0; buf[i] != '\0'; i++) {
-            drawChar(px, y, buf[i], fg, bg, scale);
-            px += (5 + 1) * scale; 
-        }
-    }
-     
-    void drawString(int x, int y, const char *str, uint16_t fg, uint16_t bg, int scale = 1) {
-        int px = x;
-        for (int i = 0; str[i] != '\0'; i++) {
-            drawChar(px, y, str[i], fg, bg, scale);
-            px += (5 + 1) * scale;  
-            }
-        }
 
-        static uint16_t color565(uint8_t r, uint8_t g, uint8_t b) {
-        return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
-        }
-   };
+        drawString(x, y, buf, fg, bg, scale);
+    }
+
+    // ==================================================
+    // COLOR
+    // ==================================================
+
+    static uint16_t color565(uint8_t r, uint8_t g, uint8_t b) {
+
+        return ((r & 0xF8) << 8)
+             | ((g & 0xFC) << 3)
+             | (b >> 3);
+    }
+};
+
 #endif
