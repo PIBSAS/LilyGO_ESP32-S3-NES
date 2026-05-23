@@ -162,6 +162,7 @@ public:
             PIN_LCD_CS,
             PIN_LCD_DC,
             PIN_LCD_WR,
+            PIN_LCD_RD,
 
             PIN_LCD_D0,
             PIN_LCD_D1,
@@ -180,7 +181,7 @@ public:
         gfx = new Arduino_ST7789(
             bus,
             PIN_LCD_RES,
-            1,          // rotation
+            0,          // rotation
             true,       // IPS
             170,        // width
             320,        // height
