@@ -2,6 +2,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <FS.h>
+#include <LittleFS.h>
 #include <driver/spi_master.h>
 #include <esp_heap_caps.h>
 #include "hw_config.h"
@@ -19,92 +20,187 @@ void setup() {
   Serial.begin(115200);
   delay(100); 
   Serial.println("\n\n====================================");
-  Serial.println("Starting DSN NES Emulator Setup");
+  Serial.println("NES Emulator Setup - T-Display-S3");
   Serial.println("====================================\n");
  
   setup_controller();
-  Serial.println("[1/4] Controller initialized.");
- 
-  Serial.println("[2/4] Mounting SD card...");
- 
-  SPIClass spiHS(SPI2_HOST);
-  spiHS.begin(SD_SCK, SD_MISO, SD_MOSI, SD_CS);
-
-  if (!SD.begin(SD_CS, spiHS, 20000000)) {
-    Serial.println("     SD Mount failed - ROM won't be accessible");
-  } else {
-    Serial.println("     ✓ SD Card mounted"); 
-    File root = SD.open("/");
-    if (root) {
-      Serial.println("     Files on SD:");
-      File file = root.openNextFile();
-      while (file && file.name()[0] != 0) {
-        Serial.printf("       - %s (%d bytes)\n", file.name(), file.size());
-        file = root.openNextFile();
-      }
-      root.close();
-    }
-  }
-  delay(200);
- 
-  Serial.println("[3/4] Initializing TFT display...");
-  delay(100);
+  Serial.println("[1/5] Controller initialized.");
+  Serial.println("[2/5] Initializing TFT");
 
   tft.init();
-  delay(100);
-  tft.fillScreen(tft.color565(0, 0, 0));
-  delay(100);
-  Serial.printf("     ✓ TFT ready: %dx%d\n", DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-  Serial.println("[4/4] ROM Loading Configuration");
- 
-  delay(100);
-  Serial.printf("     Free heap: %u bytes\n", esp_get_free_heap_size());
-  Serial.printf("     Free SPIRAM: %u bytes\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-  Serial.printf("     Total SPIRAM: %u bytes\n", heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+  tft.fillScreen(TFT_BLACK);
 
-  if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) == 0) {
-    Serial.println("     WARNING: PSRAM not initialized.");
-    Serial.println("     Set correct board/PSRAM mode in Arduino IDE (Tools menu).");
-  }
+  Serial.printf(
+      "     TFT ready: %dx%d\n",
+      DISPLAY_WIDTH,
+      DISPLAY_HEIGHT
+  );
  
-  Serial.println("\n     ROM preloading DISABLED - emulator will load on demand");
-  Serial.println("     (If emulator crashes, ROM loading is the issue)");
- 
-  Serial.println("\n====================================");
-  Serial.println("Setup complete - Showing menu");
-  Serial.println("====================================\n");
-  delay(100);
-  Serial.flush();
- 
-  int selected = show_menu();
-  if (selected < 0) {
-    Serial.println("No game selected!");
-    return;
-  }
+    // ==================================================
+    // LITTLEFS
+    // ==================================================
 
-  const char* rom_file = get_selected_game();
-  Serial.printf("Starting game: %s\n", rom_file);
+    Serial.println("[3/5] Mounting LittleFS");
+
+    if (!LittleFS.begin(true)) {
+
+        Serial.println("     LittleFS mount FAILED");
+
+    } else {
+
+        Serial.println("     LittleFS mounted");
+
+        File root = LittleFS.open("/");
+
+        File file = root.openNextFile();
+
+        while (file) {
+
+            Serial.printf(
+                "     %s (%d bytes)\n",
+                file.name(),
+                file.size()
+            );
+
+            file = root.openNextFile();
+        }
+    }
+
+    // ==================================================
+    // OPTIONAL SD
+    // ==================================================
+
+    Serial.println("[4/5] SD Card");
+
+#if SD_CS >= 0
+
+    SPIClass spiSD(SPI2_HOST);
+
+    spiSD.begin(
+        SD_SCK,
+        SD_MISO,
+        SD_MOSI,
+        SD_CS
+    );
+
+    if (!SD.begin(SD_CS, spiSD, 20000000)) {
+
+        Serial.println("     SD not detected");
+
+    } else {
+
+        Serial.println("     SD mounted");
+
+        File root = SD.open("/");
+
+        File file = root.openNextFile();
+
+        while (file) {
+
+            Serial.printf(
+                "     SD: %s (%d bytes)\n",
+                file.name(),
+                file.size()
+            );
+
+            file = root.openNextFile();
+        }
+    }
+
+#else
+
+    Serial.println("     SD disabled in hw_config");
+
+#endif
+
+    // ==================================================
+    // MEMORY
+    // ==================================================
+
+    Serial.println("[5/5] Memory");
+
+    Serial.printf(
+        "     Free heap: %u bytes\n",
+        esp_get_free_heap_size()
+    );
+
+    Serial.printf(
+        "     Free PSRAM: %u bytes\n",
+        heap_caps_get_free_size(MALLOC_CAP_SPIRAM)
+    );
+
+    Serial.printf(
+        "     Total PSRAM: %u bytes\n",
+        heap_caps_get_total_size(MALLOC_CAP_SPIRAM)
+    );
+
+    if (heap_caps_get_total_size(MALLOC_CAP_SPIRAM) == 0) {
+
+        Serial.println();
+        Serial.println("WARNING: PSRAM NOT DETECTED");
+        Serial.println("Enable OPI PSRAM in board settings");
+    }
+
+    Serial.println();
+    Serial.println("====================================");
+    Serial.println("Setup complete");
+    Serial.println("====================================");
+
+    delay(300);
+
+    // ==================================================
+    // MENU
+    // ==================================================
+
+    int selected = show_menu();
+
+    if (selected < 0) {
+
+        Serial.println("No ROM selected");
+
+        return;
+    }
+
+    const char* rom_file = get_selected_game();
+
+    Serial.printf(
+        "Starting ROM: %s\n",
+        rom_file
+    );
 
 #if ENABLE_SOUND
-  char* argv[] = {
-    "nes",
-    "-sound",
-    "-volume", "100",
-    "-sample", "16000",
-    (char*)rom_file
-  };
-  nofrendo_main(7, argv);
+
+    char* argv[] = {
+        (char*)"nes",
+        (char*)"-sound",
+        (char*)"-volume",
+        (char*)"100",
+        (char*)"-sample",
+        (char*)"16000",
+        (char*)rom_file
+    };
+
+    nofrendo_main(7, argv);
+
 #else
-  char* argv[] = {
-    "nes",
-    "-nosound",
-    (char*)rom_file
-  };
-  nofrendo_main(3, argv);
+
+    char* argv[] = {
+        (char*)"nes",
+        (char*)"-nosound",
+        (char*)rom_file
+    };
+
+    nofrendo_main(3, argv);
+
 #endif
 }
 
-void loop() { 
-  delay(1000);
+// ======================================================
+// LOOP
+// ======================================================
+
+void loop() {
+
+    delay(1000);
 }
