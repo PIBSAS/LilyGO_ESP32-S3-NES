@@ -1,35 +1,66 @@
 #ifndef HW_CONFIG_H
 #define HW_CONFIG_H
 
-// Set to 1 to enable sound, 0 to disable
+// ======================================================
+// SOUND
+// ======================================================
+
 #define ENABLE_SOUND 0
 
-// SD Card Pins
-#define SD_CS 41
-#define SD_SCK 42
-#define SD_MOSI 2
-#define SD_MISO 1
+// ======================================================
+// SD CARD
+// ======================================================
+// NO tiene slot
 
-// I2S Audio Pins (MAX98357A or similar DAC)
-#define I2S_DO 4   // DIN on MAX98357A
-#define I2S_BCK 5  // BCLK on MAX98357A
-#define I2S_WS 6   // LRC on MAX98357A
+#define SD_CS      -1
+#define SD_SCK     -1
+#define SD_MOSI    -1
+#define SD_MISO    -1
 
-// TFT Display Pins (ST7789)
-#define HW_TFT_MOSI 11   // Data In
-#define HW_TFT_SCK 12    // Clock
-#define HW_TFT_CS 10     // Chip Select
-#define HW_TFT_DC 15     // Data/Command
-#define HW_TFT_RST 9     // Reset
+// ======================================================
+// I2S AUDIO
+// ======================================================
+// Sin usar por ahora
 
-// Controller/Button Pins (Active LOW with internal pullup)
-#define BTN_UP 13
-#define BTN_DOWN 14
-#define BTN_LEFT 8
-#define BTN_RIGHT 17
-#define BTN_A 45
-#define BTN_B 21
-#define BTN_START 47
-#define BTN_SELECT 39
+#define I2S_DO     -1
+#define I2S_BCK    -1
+#define I2S_WS     -1
+
+// ======================================================
+// TFT DISPLAY - T-Display-S3
+// ST7789 i8080 Parallel 8bit
+// ======================================================
+
+#define PIN_LCD_BL    38
+
+#define PIN_LCD_D0    39
+#define PIN_LCD_D1    40
+#define PIN_LCD_D2    41
+#define PIN_LCD_D3    42
+#define PIN_LCD_D4    45
+#define PIN_LCD_D5    46
+#define PIN_LCD_D6    47
+#define PIN_LCD_D7    48
+
+#define PIN_POWER_ON  15
+
+#define PIN_LCD_RES   5
+#define PIN_LCD_CS    6
+#define PIN_LCD_DC    7
+#define PIN_LCD_WR    8
+#define PIN_LCD_RD    9
+
+// ======================================================
+// BUTTONS
+// ======================================================
+
+#define BTN_A         0
+#define BTN_B         14
+#define BTN_UP        -1
+#define BTN_DOWN      -1
+#define BTN_LEFT      -1
+#define BTN_RIGHT     -1
+#define BTN_START     -1
+#define BTN_SELECT    -1
 
 #endif
